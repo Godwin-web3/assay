@@ -1,0 +1,63 @@
+:root {
+  --bg: #0e0d0b;
+  --paper: #16140f;
+  --line: #2a261c;
+  --ink: #efe8d6;
+  --mute: #9a917c;
+  --gold: #c4a35a;
+  --warn: #d36b4e;
+  --ok: #7ea36b;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); }
+body {
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  line-height: 1.45;
+}
+
+a { color: var(--gold); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.wrap { max-width: 980px; margin: 0 auto; padding: 28px 18px 80px; }
+.top {
+  display: flex; justify-content: space-between; align-items: baseline;
+  border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 22px;
+  gap: 16px; flex-wrap: wrap;
+}
+.mark { font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); }
+.lede { color: var(--mute); max-width: 42rem; font-size: 15px; }
+h1 { font-weight: 500; font-size: 28px; margin: 6px 0 8px; }
+
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 18px 0; }
+button.tab {
+  background: transparent; color: var(--ink); border: 1px solid var(--line);
+  padding: 7px 12px; cursor: pointer; font: inherit; font-size: 14px;
+}
+button.tab.on { border-color: var(--gold); color: var(--gold); }
+
+.grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 820px) {
+  .grid.two { grid-template-columns: 1fr 1fr; }
+}
+
+.card {
+  background: var(--paper); border: 1px solid var(--line); padding: 16px 16px 14px;
+}
+.sym { font-size: 20px; margin: 0; }
+.issuer { color: var(--mute); font-size: 13px; margin: 2px 0 10px; }
+.badge {
+  display: inline-block; border: 1px solid var(--gold); color: var(--gold);
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 2px 7px; margin-bottom: 10px;
+}
+.claim { font-size: 15px; margin: 0 0 10px; }
+.warn { color: var(--warn); font-size: 14px; margin: 0 0 12px; }
+dl { display: grid; grid-template-columns: 140px 1fr; gap: 6px 10px; margin: 0; font-size: 13px; }
+dt { color: var(--mute); }
+dd { margin: 0; word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+dd.plain { font-family: inherit; font-size: 13px; word-break: normal; }
+.err { color: var(--warn); font-size: 13px; }
+
+.foot { margin-top: 28px; color: var(--mute); font-size: 13px; border-top: 1px solid var(--line); padding-top: 14px; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
