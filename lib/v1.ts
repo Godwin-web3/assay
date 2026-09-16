@@ -3,9 +3,30 @@
  *
  * Assay is the book, not a dashboard. Other products read these shapes.
  * Users of this API are people and protocols.
+ *
+ * Response shapes
+ * ---------------
+ * GET /v1/mint/:mint
+ *   instrument     catalog claim (kind, issuer, notTheShare)
+ *   live           Solana jsonParsed mint at asOf (source of truth)
+ *   snapshot       durable book row written on this read (when Supabase is configured)
+ *   impliedIncome  { vsPar, vsLastSnapshot, unit: "token", note }
+ *                    vsPar          = scaledSupply − supplyUi (cumulative tape vs par)
+ *                    vsLastSnapshot = extra scaled units from a multiplier step
+ *                                     vs the previous snapshot (0 if none / no move)
+ *   events         only multiplier / mint_authority / freeze_authority changes
+ *                    (or first-snapshot baseline). Not mint-account transfers.
+ *
+ * GET /v1/wallet/:owner
+ *   One row per catalogued token the wallet holds. Each position is
+ *   priced on the lot — protocols do not need a second /v1/mint call:
+ *     kind, claim, notTheShare, raw, scaled, multiplier, price,
+ *     mark (= scaled × pool price), close (last cash close when the
+ *     instrument has cashTicker, else null), impliedIncome (object).
  */
 import type { CatalogGroup, CatalogToken, IssuerKind } from "./catalog";
 import type { MintEvent } from "./events";
+import type { ImpliedIncome } from "./impliedIncome";
 import type { ParsedMint } from "./solana";
 
 /** Catalogued instrument. Mint is the primary key. */
@@ -21,6 +42,9 @@ export type V1Close = {
 } | null;
 
 export type V1Event = MintEvent;
+
+/** Protocol impliedIncome. Always an object — never a bare number. */
+export type V1ImpliedIncome = ImpliedIncome;
 
 export type V1Snapshot = {
   id: string | null;
@@ -43,17 +67,17 @@ export type V1Snapshot = {
 /**
  * GET /v1/mint/:mint
  *
- * instrument  — catalog claim (kind, issuer, not-the-share)
- * live        — Solana jsonParsed mint at asOf (source of truth)
- * snapshot    — durable book row written on this read (when Supabase is configured)
- * impliedIncome — mark of extra scaled units vs the previous snapshot; null if none
- * events      — multiplier note + recent mint-account txs (also stored on the snapshot)
+ * instrument    — catalog claim (kind, issuer, not-the-share)
+ * live          — Solana jsonParsed mint at asOf (source of truth)
+ * snapshot      — durable book row written on this read (when Supabase is configured)
+ * impliedIncome — scaled-vs-raw object; vsLastSnapshot is 0 unless the multiplier moved
+ * events        — multiplier / authority diffs vs previous snapshot (also stored on the snapshot)
  */
 export type V1MintResponse = {
   instrument: V1Instrument;
   live: V1MintState;
   snapshot: V1Snapshot;
-  impliedIncome: number | null;
+  impliedIncome: V1ImpliedIncome;
   events: V1Event[];
   asOf: string;
 };
@@ -61,18 +85,24 @@ export type V1MintResponse = {
 /**
  * GET /v1/wallet/:owner
  *
- * One row per catalogued token the wallet holds. Protocols need:
- * kind, raw, scaled, price, impliedIncome, claim.
+ * One row per catalogued token the wallet holds. Complete enough to
+ * mark the lot without a second mint read.
  */
 export type V1WalletPosition = {
   mint: string;
   instrument: V1Instrument;
   kind: IssuerKind;
   claim: string;
+  notTheShare: string;
   raw: number;
   scaled: number;
+  multiplier: number | null;
   price: number | null;
-  impliedIncome: number | null;
+  /** scaled × current Jupiter pool print. Null if price is missing. */
+  mark: number | null;
+  /** Last cash close when the instrument has cashTicker; otherwise null. */
+  close: V1Close;
+  impliedIncome: V1ImpliedIncome;
 };
 
 export type V1WalletResponse = {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isBase58Address, recordMintRead } from "@/lib/book";
+import { isBase58Address, positionMark, recordMintRead } from "@/lib/book";
 import { tokenByMint } from "@/lib/catalog";
 import { impliedIncome } from "@/lib/impliedIncome";
 import { readWalletHoldings } from "@/lib/solana";
@@ -31,11 +31,12 @@ export async function GET(
         const multiplier = recorded.live.multiplier;
         const scaled =
           multiplier !== null ? holding.rawUi * multiplier : holding.rawUi;
+        const price = recorded.snapshot.price;
         const income = impliedIncome({
           rawUi: holding.rawUi,
+          scaledUi: scaled,
           multiplier,
           previousMultiplier: recorded.previous?.multiplier ?? null,
-          price: recorded.snapshot.price,
           hasPrevious: recorded.previous !== null,
         });
         positions.push({
@@ -43,9 +44,13 @@ export async function GET(
           instrument: recorded.instrument,
           kind: recorded.instrument.kind,
           claim: recorded.instrument.claim,
+          notTheShare: recorded.instrument.notTheShare,
           raw: holding.rawUi,
           scaled,
-          price: recorded.snapshot.price,
+          multiplier,
+          price,
+          mark: positionMark(scaled, price),
+          close: recorded.snapshot.close,
           impliedIncome: income,
         });
       } catch (err) {
