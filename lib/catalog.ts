@@ -173,3 +173,21 @@ export const GROUPS: { id: CatalogGroup; label: string }[] = [
 export function tokenByMint(mint: string) {
   return TOKENS.find((t) => t.mint === mint);
 }
+
+/** Row shape for the instruments table (durable book). */
+export function instrumentRow(token: CatalogToken) {
+  return {
+    mint: token.mint,
+    id: token.id,
+    symbol: token.symbol,
+    name: token.name,
+    underlying: token.underlying,
+    cash_ticker: token.cashTicker,
+    issuer: token.issuer,
+    kind: token.kind,
+    claim: token.claim,
+    not_the_share: token.notTheShare,
+    docs: token.docs,
+    catalog_group: token.group,
+  };
+}
