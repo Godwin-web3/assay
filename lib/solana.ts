@@ -94,6 +94,59 @@ export async function readMint(mint: string): Promise<ParsedMint> {
   };
 }
 
+const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+
+export type WalletHolding = {
+  mint: string;
+  rawUi: number;
+  decimals: number;
+};
+
+export async function readWalletHoldings(
+  owner: string
+): Promise<WalletHolding[]> {
+  const scans = [TOKEN_PROGRAM, TOKEN_2022].map((programId) =>
+    rpc<{
+      value?: Array<{
+        account?: {
+          data?: {
+            parsed?: {
+              info?: {
+                mint?: string;
+                tokenAmount?: {
+                  uiAmount?: number | null;
+                  decimals?: number;
+                  amount?: string;
+                };
+              };
+            };
+          };
+        };
+      }>;
+    }>("getTokenAccountsByOwner", [
+      owner,
+      { programId },
+      { encoding: "jsonParsed" },
+    ])
+  );
+
+  const results = await Promise.all(scans);
+  const out: WalletHolding[] = [];
+  for (const pack of results) {
+    for (const row of pack.value ?? []) {
+      const info = row.account?.data?.parsed?.info;
+      const mint = info?.mint;
+      const ui = info?.tokenAmount?.uiAmount ?? 0;
+      const decimals = info?.tokenAmount?.decimals ?? 0;
+      if (mint && ui && ui > 0) {
+        out.push({ mint, rawUi: ui, decimals });
+      }
+    }
+  }
+  return out;
+}
+
 export async function jupiterPrice(mint: string): Promise<number | null> {
   const urls = [
     `https://lite-api.jup.ag/price/v3?ids=${mint}`,
