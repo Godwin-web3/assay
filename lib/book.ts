@@ -1,8 +1,8 @@
 import type { CatalogToken } from "./catalog";
 import { instrumentRow, tokenByMint } from "./catalog";
 import type { MintEvent } from "./events";
-import { mintEvents } from "./events";
-import { impliedIncome } from "./impliedIncome";
+import { bookEvents } from "./events";
+import { impliedIncome, roundToken, type ImpliedIncome } from "./impliedIncome";
 import { lastCashClose, type LastClose } from "./close";
 import { jupiterPrice, readMint } from "./solana";
 import { supabaseAdmin } from "./supabase";
@@ -15,6 +15,8 @@ export type PreviousSnapshot = {
   supplyUi: number | null;
   scaledSupply: number | null;
   price: number | null;
+  mintAuthority: string | null;
+  freezeAuthority: string | null;
 };
 
 export type RecordedMint = V1MintResponse & {
@@ -41,6 +43,7 @@ type SnapshotInsert = {
   events: MintEvent[];
   payload: Record<string, unknown>;
   previous_snapshot_id: string | null;
+  /** vsLastSnapshot in token units. Full object is in payload.impliedIncome. */
   implied_income: number | null;
 };
 
@@ -50,8 +53,23 @@ function asNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function asText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  return value;
+}
+
 export function instrumentFromCatalog(token: CatalogToken): V1Instrument {
   return token;
+}
+
+export function positionMark(
+  scaled: number,
+  price: number | null
+): number | null {
+  if (price === null || !Number.isFinite(price)) return null;
+  const marked = scaled * price;
+  if (!Number.isFinite(marked)) return null;
+  return roundToken(marked);
 }
 
 async function upsertInstrument(token: CatalogToken): Promise<void> {
@@ -70,7 +88,9 @@ async function latestSnapshot(mint: string): Promise<PreviousSnapshot | null> {
   if (!db) return null;
   const { data, error } = await db
     .from("snapshots")
-    .select("id, as_of, multiplier, supply_ui, scaled_supply, price")
+    .select(
+      "id, as_of, multiplier, supply_ui, scaled_supply, price, mint_authority, freeze_authority"
+    )
     .eq("mint", mint)
     .order("as_of", { ascending: false })
     .limit(1)
@@ -87,6 +107,8 @@ async function latestSnapshot(mint: string): Promise<PreviousSnapshot | null> {
     supplyUi: asNumber(data.supply_ui),
     scaledSupply: asNumber(data.scaled_supply),
     price: asNumber(data.price),
+    mintAuthority: asText(data.mint_authority),
+    freezeAuthority: asText(data.freeze_authority),
   };
 }
 
@@ -125,20 +147,31 @@ export async function recordMintRead(mint: string): Promise<RecordedMint> {
     ? await lastCashClose(token.cashTicker)
     : null;
 
-  const events = await mintEvents({
-    mint: token.mint,
-    multiplier: live.multiplier,
-  });
-
   await upsertInstrument(token);
   const previous = await latestSnapshot(token.mint);
   const asOf = new Date().toISOString();
 
-  const income = impliedIncome({
+  const events = bookEvents({
+    asOf,
+    live: {
+      multiplier: live.multiplier,
+      mintAuthority: live.mintAuthority,
+      freezeAuthority: live.freezeAuthority,
+    },
+    previous: previous
+      ? {
+          multiplier: previous.multiplier,
+          mintAuthority: previous.mintAuthority,
+          freezeAuthority: previous.freezeAuthority,
+        }
+      : null,
+  });
+
+  const income: ImpliedIncome = impliedIncome({
     rawUi: live.supplyUi,
+    scaledUi: live.scaledSupply,
     multiplier: live.multiplier,
     previousMultiplier: previous?.multiplier ?? null,
-    price,
     hasPrevious: previous !== null,
   });
 
@@ -172,7 +205,7 @@ export async function recordMintRead(mint: string): Promise<RecordedMint> {
     events,
     payload,
     previous_snapshot_id: previous?.id ?? null,
-    implied_income: income,
+    implied_income: income.vsLastSnapshot,
   });
 
   const snapshot: V1Snapshot = {

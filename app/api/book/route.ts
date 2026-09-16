@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TOKENS, tokenByMint } from "@/lib/catalog";
 import { lastCashClose } from "@/lib/close";
-import { mintEvents } from "@/lib/events";
+import { mintStatusEvents } from "@/lib/events";
 import { jupiterPrice, readMint } from "@/lib/solana";
 
 export const dynamic = "force-dynamic";
@@ -36,10 +36,7 @@ export async function GET(req: NextRequest) {
           price !== null && close
             ? ((price - close.close) / close.close) * 100
             : null;
-        const events = await mintEvents({
-          mint: token.mint,
-          multiplier: mintState.multiplier,
-        });
+        const events = mintStatusEvents(mintState.multiplier);
         return {
           token,
           mintState,

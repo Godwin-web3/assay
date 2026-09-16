@@ -1,68 +1,120 @@
-const RPC =
-  process.env.SOLANA_RPC ?? "https://api.mainnet-beta.solana.com";
+/**
+ * Book events: only multiplier / mint authority / freeze authority.
+ *
+ * Transfer signatures on the mint account are not events. They do not
+ * change the claim. The book records a row when one of the three
+ * material fields moved versus the previous snapshot, or on the first
+ * snapshot as a baseline.
+ */
+export type MintEventKind =
+  | "multiplier"
+  | "mint_authority"
+  | "freeze_authority";
 
 export type MintEvent = {
-  kind: "multiplier" | "mint_tx";
+  kind: MintEventKind;
   label: string;
   at: string | null;
-  signature?: string;
 };
 
-export async function mintEvents(args: {
-  mint: string;
+export type EventAuthorities = {
   multiplier: number | null;
-}): Promise<MintEvent[]> {
+  mintAuthority: string | null;
+  freezeAuthority: string | null;
+};
+
+function authorityLabel(value: string | null): string {
+  return value ?? "none";
+}
+
+function multipliersEqual(a: number | null, b: number | null): boolean {
+  if (a === null && b === null) return true;
+  if (a === null || b === null) return false;
+  return Math.abs(a - b) < 1e-12;
+}
+
+function multiplierStatusLabel(multiplier: number | null): string {
+  if (multiplier !== null && multiplier !== 1) {
+    const extra = ((multiplier - 1) * 100).toFixed(3);
+    return `Scaled UI Amount is ${multiplier}. Raw units understate economic units by ${extra}%.`;
+  }
+  if (multiplier === 1) {
+    return "Multiplier is 1. No scaled corporate action is applied right now.";
+  }
+  return "No Scaled UI Amount on this mint.";
+}
+
+/**
+ * Homepage /api/book: current multiplier status only.
+ * Does not fetch mint-account transfers.
+ */
+export function mintStatusEvents(multiplier: number | null): MintEvent[] {
+  return [
+    {
+      kind: "multiplier",
+      label: multiplierStatusLabel(multiplier),
+      at: null,
+    },
+  ];
+}
+
+/**
+ * Snapshot events for the book.
+ * First snapshot: baseline of multiplier + both authorities.
+ * Later snapshots: only fields that changed.
+ */
+export function bookEvents(args: {
+  asOf: string;
+  live: EventAuthorities;
+  previous: EventAuthorities | null;
+}): MintEvent[] {
+  const { asOf, live, previous } = args;
+
+  if (previous === null) {
+    return [
+      {
+        kind: "multiplier",
+        label: `Baseline: ${multiplierStatusLabel(live.multiplier)}`,
+        at: asOf,
+      },
+      {
+        kind: "mint_authority",
+        label: `Baseline mint authority ${authorityLabel(live.mintAuthority)}.`,
+        at: asOf,
+      },
+      {
+        kind: "freeze_authority",
+        label: `Baseline freeze authority ${authorityLabel(live.freezeAuthority)}.`,
+        at: asOf,
+      },
+    ];
+  }
+
   const out: MintEvent[] = [];
-  if (args.multiplier !== null && args.multiplier !== 1) {
-    const extra = ((args.multiplier - 1) * 100).toFixed(3);
+
+  if (!multipliersEqual(live.multiplier, previous.multiplier)) {
     out.push({
       kind: "multiplier",
-      label: `Scaled UI Amount is ${args.multiplier}. Raw units understate economic units by ${extra}%.`,
-      at: null,
-    });
-  } else {
-    out.push({
-      kind: "multiplier",
-      label:
-        args.multiplier === 1
-          ? "Multiplier is 1. No scaled corporate action is applied right now."
-          : "No Scaled UI Amount on this mint.",
-      at: null,
+      label: `Multiplier ${previous.multiplier ?? "none"} → ${live.multiplier ?? "none"}.`,
+      at: asOf,
     });
   }
 
-  try {
-    const res = await fetch(RPC, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "getSignaturesForAddress",
-        params: [args.mint, { limit: 8 }],
-      }),
-      cache: "no-store",
+  if (live.mintAuthority !== previous.mintAuthority) {
+    out.push({
+      kind: "mint_authority",
+      label: `Mint authority ${authorityLabel(previous.mintAuthority)} → ${authorityLabel(live.mintAuthority)}.`,
+      at: asOf,
     });
-    const json = (await res.json()) as {
-      result?: Array<{
-        signature: string;
-        blockTime?: number | null;
-        err?: unknown;
-      }>;
-    };
-    for (const row of json.result ?? []) {
-      if (row.err) continue;
-      out.push({
-        kind: "mint_tx",
-        label: "Transaction touching the mint account",
-        at: row.blockTime
-          ? new Date(row.blockTime * 1000).toISOString()
-          : null,
-        signature: row.signature,
-      });
-    }
-  } catch {
-    // keep multiplier row
   }
+
+  if (live.freezeAuthority !== previous.freezeAuthority) {
+    out.push({
+      kind: "freeze_authority",
+      label: `Freeze authority ${authorityLabel(previous.freezeAuthority)} → ${authorityLabel(live.freezeAuthority)}.`,
+      at: asOf,
+    });
+  }
+
   return out;
 }
