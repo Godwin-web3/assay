@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { KIND_LABEL, type CatalogToken } from "@/lib/catalog";
+import { GROUPS, KIND_LABEL, type CatalogGroup, type CatalogToken } from "@/lib/catalog";
 
 type Page = {
   token: CatalogToken;
   price: number | null;
   vsCohort: number | null;
+  vsClose: number | null;
+  close: { ticker: string; close: number; date: string; source: string } | null;
+  events: { kind: string; label: string; at: string | null; signature?: string }[];
   error: string | null;
   mintState: {
     decimals: number | null;
@@ -20,7 +23,7 @@ type Page = {
   } | null;
 };
 
-type Book = { asOf: string; sources: { overnightOfficialNav: boolean }; pages: Page[] };
+type Book = { asOf: string; pages: Page[] };
 
 type WalletLine = {
   token: CatalogToken;
@@ -42,7 +45,7 @@ type WalletBook = {
 };
 
 export default function Home() {
-  const [group, setGroup] = useState<"spacex" | "apple">("spacex");
+  const [group, setGroup] = useState<CatalogGroup>("spacex");
   const [book, setBook] = useState<Book | null>(null);
   const [status, setStatus] = useState("reading ledger");
   const [owner, setOwner] = useState("");
@@ -135,25 +138,25 @@ export default function Home() {
               </dd>
             </dl>
           ))}
+          <p className="issuer">Other token accounts ignored: {wallet.otherTokenAccounts}</p>
           <p className="issuer">
-            Other token accounts ignored: {wallet.otherTokenAccounts}
+            <a href={`/api/statement?owner=${encodeURIComponent(wallet.owner)}`}>download CSV</a>
+            {" · "}
+            <a href={`/statement?owner=${encodeURIComponent(wallet.owner)}`}>print statement</a>
           </p>
         </section>
       )}
 
       <div className="tabs">
-        <button
-          className={group === "spacex" ? "tab on" : "tab"}
-          onClick={() => setGroup("spacex")}
-        >
-          SpaceX four claims
-        </button>
-        <button
-          className={group === "apple" ? "tab on" : "tab"}
-          onClick={() => setGroup("apple")}
-        >
-          AAPL multiplier
-        </button>
+        {GROUPS.map((g) => (
+          <button
+            key={g.id}
+            className={group === g.id ? "tab on" : "tab"}
+            onClick={() => setGroup(g.id)}
+          >
+            {g.label}
+          </button>
+        ))}
       </div>
 
       {status && <p className="issuer">{status}</p>}
@@ -178,39 +181,31 @@ export default function Home() {
               <dd>{page.mintState?.mintAuthority ?? "none"}</dd>
               <dt>freeze</dt>
               <dd>{page.mintState?.freezeAuthority ?? "none"}</dd>
-              <dt>extensions</dt>
-              <dd className="plain">
-                {page.mintState?.extensions.length
-                  ? page.mintState.extensions.join(", ")
-                  : "none parsed"}
-              </dd>
               <dt>multiplier</dt>
-              <dd className="plain">
-                {page.mintState?.multiplier ?? "not present"}
-              </dd>
-              <dt>raw supply</dt>
-              <dd className="plain">
-                {page.mintState?.supplyUi?.toLocaleString() ?? "-"}
-              </dd>
-              <dt>scaled supply</dt>
-              <dd className="plain">
-                {page.mintState?.scaledSupply?.toLocaleString() ?? "-"}
-              </dd>
+              <dd className="plain">{page.mintState?.multiplier ?? "not present"}</dd>
               <dt>pool price</dt>
               <dd className="plain">
                 {page.price !== null ? `$${page.price.toFixed(4)}` : "no pool print"}
               </dd>
-              <dt>vs cohort</dt>
+              <dt>last close</dt>
               <dd className="plain">
-                {page.vsCohort === null
-                  ? "-"
-                  : `${page.vsCohort >= 0 ? "+" : ""}${page.vsCohort.toFixed(2)}%`}
+                {page.close
+                  ? `$${page.close.close.toFixed(2)} (${page.close.date})`
+                  : page.token.cashTicker
+                    ? "close unavailable"
+                    : "no listed close"}
               </dd>
+              <dt>pool vs close</dt>
+              <dd className="plain">
+                {page.vsClose === null
+                  ? "-"
+                  : `${page.vsClose >= 0 ? "+" : ""}${page.vsClose.toFixed(2)}%`}
+              </dd>
+              <dt>events</dt>
+              <dd className="plain">{page.events?.[0]?.label ?? "none"}</dd>
               <dt>docs</dt>
               <dd className="plain">
-                <a href={page.token.docs} target="_blank" rel="noreferrer">
-                  primary source
-                </a>
+                <a href={page.token.docs} target="_blank" rel="noreferrer">primary source</a>
               </dd>
             </dl>
           </article>
@@ -219,8 +214,7 @@ export default function Home() {
 
       <footer className="foot">
         <p>
-          Price is a Jupiter pool print, not official NAV. Overnight cash-market
-          tape is not included. Last-close versus pool comes next. No Pyth Pro.
+          Pool print is Jupiter. Last close is the cash session close, not overnight official NAV.
         </p>
         <p className="mono">{book?.asOf ?? ""}</p>
       </footer>
