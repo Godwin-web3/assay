@@ -23,6 +23,12 @@
  *     kind, claim, notTheShare, raw, scaled, multiplier, price,
  *     mark (= scaled × pool price), close (last cash close when the
  *     instrument has cashTicker, else null), impliedIncome (object).
+ *
+ * GET /v1/wallet/:owner/statement?from=&to=
+ *   Accountant/vault tape over an inclusive as_of range, built from
+ *   durable snapshots — not from one live Solana read. Optional
+ *   format=csv or Accept: text/csv serializes the same object.
+ *   Persistence (Supabase) is required; 503 if unset.
  */
 import type { CatalogGroup, CatalogToken, IssuerKind } from "./catalog";
 import type { MintEvent } from "./events";
@@ -109,6 +115,53 @@ export type V1WalletResponse = {
   owner: string;
   asOf: string;
   positions: V1WalletPosition[];
+};
+
+/**
+ * GET /v1/wallet/:owner/statement?from=&to=
+ *
+ * Rows are snapshot diffs for catalogued mints the wallet holds now.
+ * Live Solana is only used to list those mints; the tape is consecutive
+ * snapshots (plus the latest snapshot before `from` as baseline).
+ *
+ * kind is the quiet-events set plus implied_income when vsLastSnapshot
+ * accrued (scaled-vs-raw step, token units). Transfer noise is omitted.
+ *
+ * Empty rows (200) when the wallet has no catalogued holdings and/or
+ * nothing material moved in range.
+ */
+export type V1StatementKind =
+  | "multiplier"
+  | "implied_income"
+  | "mint_authority"
+  | "freeze_authority";
+
+/** Fields that changed for this row's kind. Extra keys are omitted. */
+export type V1StatementValues = {
+  multiplier?: number | null;
+  mintAuthority?: string | null;
+  freezeAuthority?: string | null;
+  supplyUi?: number | null;
+  scaledSupply?: number | null;
+};
+
+export type V1StatementRow = {
+  at: string;
+  mint: string;
+  symbol: string;
+  kind: V1StatementKind;
+  label: string;
+  before: V1StatementValues;
+  after: V1StatementValues;
+  impliedIncome: V1ImpliedIncome | null;
+};
+
+export type V1WalletStatementResponse = {
+  owner: string;
+  from: string;
+  to: string;
+  asOf: string;
+  rows: V1StatementRow[];
 };
 
 export type V1ErrorResponse = {
