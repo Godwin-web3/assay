@@ -26,10 +26,13 @@ Protocols read:
 
 - `GET /v1/mint/:mint` — instrument + live Solana mint state + latest snapshot + `impliedIncome` object + quiet events
 - `GET /v1/wallet/:owner` — each catalogued holding, complete enough to mark the lot without a second mint call
+- `GET /v1/wallet/:owner/statement?from=&to=` — dated statement from snapshot diffs (not a live tape). Requires both `from` and `to` (ISO date or datetime, inclusive on snapshot `as_of`). Optional `format=csv` or `Accept: text/csv` serializes the same object.
 
 Shapes are in `lib/v1.ts`. Solana (`lib/solana.ts`) remains the live source of truth for mint and wallet reads. Durable rows live in Supabase (`instruments`, `snapshots`). Events are stored as jsonb on the snapshot (keyed by mint + as_of), not a third product.
 
-On every successful v1 read: fetch Solana → append a snapshot → compute implied income vs par and vs the prior snapshot for that mint. Formula is documented in `lib/impliedIncome.ts`.
+On every successful v1 mint/wallet read: fetch Solana → append a snapshot → compute implied income vs par and vs the prior snapshot for that mint. Formula is documented in `lib/impliedIncome.ts`.
+
+The statement does not append a snapshot and does not rebuild history from one Solana read. Live Solana is used only to list catalogued mints the wallet holds now; rows are consecutive snapshot diffs for those mints (multiplier, implied income, mint/freeze authority). Transfer noise is omitted. Persistence is required (`503` if Supabase is unset). Empty `rows` (`200`) when nothing catalogued was held and/or nothing material moved in range.
 
 ### impliedIncome
 
@@ -57,6 +60,10 @@ Each `/v1/wallet/:owner` holding includes: `kind`, `claim`, `notTheShare`, `raw`
 
 Only `multiplier`, `mint_authority`, and `freeze_authority` — when they changed vs the previous snapshot, or as a first-snapshot baseline. Mint-account transfers are not events.
 
+### Statement
+
+`GET /v1/wallet/:owner/statement?from=&to=` is the dated book for a wallet. Rows are snapshot diffs, not a dump of current lots. The existing `/api/statement` CSV remains the live point-in-time download from the site.
+
 ## Run
 
 ```bash
@@ -77,7 +84,7 @@ Copy `.env.example` and set:
 
 Apply `supabase/migrations/` in order (schema + seed of current `TOKENS`). Re-sync the catalog with `npm run seed`.
 
-If those credentials are missing, v1 still returns live Solana data and skips persistence (`snapshot.persisted: false`; `impliedIncome.vsLastSnapshot` is `0` until a prior snapshot exists).
+If those credentials are missing, v1 mint/wallet still return live Solana data and skip persistence (`snapshot.persisted: false`; `impliedIncome.vsLastSnapshot` is `0` until a prior snapshot exists). `GET /v1/wallet/:owner/statement` cannot: it needs the snapshot table and returns `503`.
 
 ## Repo
 

@@ -47,15 +47,121 @@ type SnapshotInsert = {
   implied_income: number | null;
 };
 
-function asNumber(value: unknown): number | null {
+export function asNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? n : null;
 }
 
-function asText(value: unknown): string | null {
+export function asText(value: unknown): string | null {
   if (typeof value !== "string") return null;
   return value;
+}
+
+/** Durable snapshot fields the statement diffs. Not a live mint read. */
+export type BookSnapshot = {
+  id: string;
+  mint: string;
+  asOf: string;
+  supplyUi: number | null;
+  scaledSupply: number | null;
+  multiplier: number | null;
+  mintAuthority: string | null;
+  freezeAuthority: string | null;
+};
+
+const SNAPSHOT_STATEMENT_COLUMNS =
+  "id, mint, as_of, supply_ui, scaled_supply, multiplier, mint_authority, freeze_authority";
+
+function asIso(value: unknown): string | null {
+  if (typeof value === "string" && value.length > 0) return value;
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    return value.toISOString();
+  }
+  return null;
+}
+
+function mapSnapshotRow(row: Record<string, unknown>): BookSnapshot | null {
+  const id = asText(row.id);
+  const mint = asText(row.mint);
+  const asOf = asIso(row.as_of);
+  if (!id || !mint || !asOf) return null;
+  return {
+    id,
+    mint,
+    asOf,
+    supplyUi: asNumber(row.supply_ui),
+    scaledSupply: asNumber(row.scaled_supply),
+    multiplier: asNumber(row.multiplier),
+    mintAuthority: asText(row.mint_authority),
+    freezeAuthority: asText(row.freeze_authority),
+  };
+}
+
+const SNAPSHOT_PAGE = 1000;
+
+/**
+ * Snapshots for a mint with as_of in [fromIso, toIso] (inclusive),
+ * plus the latest snapshot strictly before fromIso (baseline for the
+ * first in-range diff). History only — does not read Solana.
+ */
+export async function loadMintSnapshotsForRange(args: {
+  mint: string;
+  fromIso: string;
+  toIso: string;
+}): Promise<{ snapshots: BookSnapshot[]; error: string | null }> {
+  const db = supabaseAdmin();
+  if (!db) {
+    return {
+      snapshots: [],
+      error:
+        "Statements require a persisted book. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
+    };
+  }
+
+  const { mint, fromIso, toIso } = args;
+  const inRange: BookSnapshot[] = [];
+  let offset = 0;
+
+  for (;;) {
+    const { data, error } = await db
+      .from("snapshots")
+      .select(SNAPSHOT_STATEMENT_COLUMNS)
+      .eq("mint", mint)
+      .gte("as_of", fromIso)
+      .lte("as_of", toIso)
+      .order("as_of", { ascending: true })
+      .range(offset, offset + SNAPSHOT_PAGE - 1);
+    if (error) {
+      console.error("snapshots range lookup failed", error.message);
+      return { snapshots: [], error: error.message };
+    }
+    const page = (data ?? [])
+      .map((row) => mapSnapshotRow(row as Record<string, unknown>))
+      .filter((row): row is BookSnapshot => row !== null);
+    inRange.push(...page);
+    if (page.length < SNAPSHOT_PAGE) break;
+    offset += SNAPSHOT_PAGE;
+  }
+
+  const { data: priorRow, error: priorError } = await db
+    .from("snapshots")
+    .select(SNAPSHOT_STATEMENT_COLUMNS)
+    .eq("mint", mint)
+    .lt("as_of", fromIso)
+    .order("as_of", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (priorError) {
+    console.error("snapshots lookback failed", priorError.message);
+    return { snapshots: [], error: priorError.message };
+  }
+
+  const prior = priorRow
+    ? mapSnapshotRow(priorRow as Record<string, unknown>)
+    : null;
+  const snapshots = prior ? [prior, ...inRange] : inRange;
+  return { snapshots, error: null };
 }
 
 export function instrumentFromCatalog(token: CatalogToken): V1Instrument {
