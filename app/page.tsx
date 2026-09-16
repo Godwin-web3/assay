@@ -22,10 +22,32 @@ type Page = {
 
 type Book = { asOf: string; sources: { overnightOfficialNav: boolean }; pages: Page[] };
 
+type WalletLine = {
+  token: CatalogToken;
+  kindLabel: string;
+  rawUi: number;
+  scaledUi: number;
+  multiplier: number | null;
+  price: number | null;
+  mark: number | null;
+};
+
+type WalletBook = {
+  owner: string;
+  asOf: string;
+  lines: WalletLine[];
+  otherTokenAccounts: number;
+  note: string;
+  error?: string;
+};
+
 export default function Home() {
   const [group, setGroup] = useState<"spacex" | "apple">("spacex");
   const [book, setBook] = useState<Book | null>(null);
   const [status, setStatus] = useState("reading ledger");
+  const [owner, setOwner] = useState("");
+  const [wallet, setWallet] = useState<WalletBook | null>(null);
+  const [walletStatus, setWalletStatus] = useState("");
 
   useEffect(() => {
     let dead = false;
@@ -60,6 +82,65 @@ export default function Home() {
         </div>
       </header>
 
+      <form
+        className="wallet"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const addr = owner.trim();
+          if (!addr) return;
+          setWalletStatus("reading wallet");
+          setWallet(null);
+          fetch(`/api/wallet?owner=${encodeURIComponent(addr)}`)
+            .then(async (r) => {
+              const data = (await r.json()) as WalletBook;
+              setWallet(data);
+              setWalletStatus(data.error ?? "");
+            })
+            .catch(() => setWalletStatus("wallet read failed"));
+        }}
+      >
+        <input
+          value={owner}
+          onChange={(e) => setOwner(e.target.value)}
+          placeholder="paste a Solana wallet"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+        />
+        <button type="submit">read book</button>
+      </form>
+      {walletStatus && <p className="issuer">{walletStatus}</p>}
+      {wallet && !wallet.error && (
+        <section className="card" style={{ marginBottom: 16 }}>
+          <div className="badge">wallet book</div>
+          <h2 className="sym">What this address actually holds</h2>
+          <p className="issuer">{wallet.owner}</p>
+          <p className="claim">{wallet.note}</p>
+          {wallet.lines.length === 0 && (
+            <p className="warn">No catalogued tokenized stocks in this wallet.</p>
+          )}
+          {wallet.lines.map((line) => (
+            <dl key={line.token.mint} style={{ marginBottom: 12 }}>
+              <dt>{line.token.symbol}</dt>
+              <dd className="plain">{line.kindLabel}</dd>
+              <dt>raw</dt>
+              <dd className="plain">{line.rawUi.toLocaleString()}</dd>
+              <dt>scaled</dt>
+              <dd className="plain">{line.scaledUi.toLocaleString()}</dd>
+              <dt>multiplier</dt>
+              <dd className="plain">{line.multiplier ?? "none"}</dd>
+              <dt>mark</dt>
+              <dd className="plain">
+                {line.mark !== null ? `$${line.mark.toFixed(2)}` : "no pool print"}
+              </dd>
+            </dl>
+          ))}
+          <p className="issuer">
+            Other token accounts ignored: {wallet.otherTokenAccounts}
+          </p>
+        </section>
+      )}
+
       <div className="tabs">
         <button
           className={group === "spacex" ? "tab on" : "tab"}
@@ -92,7 +173,7 @@ export default function Home() {
               <dt>mint</dt>
               <dd>{page.token.mint}</dd>
               <dt>program</dt>
-              <dd>{page.mintState?.program ?? "—"}</dd>
+              <dd>{page.mintState?.program ?? "-"}</dd>
               <dt>mint authority</dt>
               <dd>{page.mintState?.mintAuthority ?? "none"}</dd>
               <dt>freeze</dt>
@@ -109,11 +190,11 @@ export default function Home() {
               </dd>
               <dt>raw supply</dt>
               <dd className="plain">
-                {page.mintState?.supplyUi?.toLocaleString() ?? "—"}
+                {page.mintState?.supplyUi?.toLocaleString() ?? "-"}
               </dd>
               <dt>scaled supply</dt>
               <dd className="plain">
-                {page.mintState?.scaledSupply?.toLocaleString() ?? "—"}
+                {page.mintState?.scaledSupply?.toLocaleString() ?? "-"}
               </dd>
               <dt>pool price</dt>
               <dd className="plain">
@@ -122,7 +203,7 @@ export default function Home() {
               <dt>vs cohort</dt>
               <dd className="plain">
                 {page.vsCohort === null
-                  ? "—"
+                  ? "-"
                   : `${page.vsCohort >= 0 ? "+" : ""}${page.vsCohort.toFixed(2)}%`}
               </dd>
               <dt>docs</dt>

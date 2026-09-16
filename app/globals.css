@@ -29,6 +29,18 @@ a:hover { text-decoration: underline; }
 .lede { color: var(--mute); max-width: 42rem; font-size: 15px; }
 h1 { font-weight: 500; font-size: 28px; margin: 6px 0 8px; }
 
+.wallet {
+  display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px;
+}
+.wallet input {
+  flex: 1 1 240px; min-width: 0; background: var(--bg); color: var(--ink);
+  border: 1px solid var(--line); padding: 9px 10px; font: inherit; font-size: 14px;
+}
+.wallet button {
+  background: var(--gold); color: #16140f; border: 0; padding: 9px 14px;
+  font: inherit; font-size: 14px; cursor: pointer;
+}
+
 .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 18px 0; }
 button.tab {
   background: transparent; color: var(--ink); border: 1px solid var(--line);
