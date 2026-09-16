@@ -22,6 +22,14 @@ Multiplier path.
 xStocks Scaled UI Amount: raw amount stays. Multiplier moves. Display is raw × multiplier.
 https://docs.xstocks.fi/developers/multipliers
 
+Ondo Token-2022 mints for NVDAon, TSLAon, and SPYon were taken from Ondo `gm-solana-simulator` `constants.rs` plus on-chain Token-2022 `tokenMetadata` (mint authority `9foMHsSDq7nMg4WPusSz9eY7tyxyukqborA8GyU5cUxD`, same as AAPLon) — not Dexscreener.
+
+| Symbol | Issuer | Kind | Mint |
+| --- | --- | --- | --- |
+| NVDAon | Ondo Global Markets (BVI) | structured note | `gEGtLTPNQ7jcg25zTetkbmF7teoDLcrfTnQfmn2ondo` |
+| TSLAon | Ondo Global Markets (BVI) | structured note | `KeGv7bsfR4MheC1CkmnAVceoApjrkvBhHYjWb67ondo` |
+| SPYon | Ondo Global Markets (BVI) | structured note | `k18WJUULWheRkSpSquYGdNNmtuE2Vbw1hpuUi92ondo` |
+
 ## Price
 
 Live line: Jupiter pool price.
